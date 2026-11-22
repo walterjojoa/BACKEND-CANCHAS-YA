@@ -87,6 +87,7 @@ Los endpoints protegidos necesitan el encabezado `Authorization: Bearer <token>`
 | POST | `/api/auth/login` | Público | Iniciar sesión, devuelve el JWT |
 | GET | `/api/fields` | Público | Listar canchas activas |
 | GET | `/api/fields?zone=NORTH` | Público | Canchas de una zona (`NORTH`, `CENTER`, `WEST`, `EAST`, `SOUTH`) |
+| GET | `/api/fields/nearby?lat=1.2136&lng=-77.2811&limit=10` | Público | Canchas más cercanas a un punto, con `distanceKm` (en línea recta) |
 | GET | `/api/fields/{id}` | Público | Detalle de una cancha con sus horarios |
 | GET | `/api/fields/{id}/availability?date=2026-12-05` | Público | Franjas de una hora libres/ocupadas ese día |
 | POST | `/api/fields` | OWNER | Publicar una cancha |
