@@ -83,6 +83,7 @@ class ReservationFlowIntegrationTest {
         mvc.perform(post("/api/reservations/" + reservationId + "/payments").header("Authorization", bearer(playerToken))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"method\":\"NEQUI\"}"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paymentId").isNumber())
                 .andExpect(jsonPath("$.amount").value(48000))
                 .andExpect(jsonPath("$.status").value("APPROVED"))
                 .andExpect(jsonPath("$.reservationStatus").value("CONFIRMED"));
