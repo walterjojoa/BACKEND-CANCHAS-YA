@@ -48,7 +48,9 @@ public class PaymentService {
         PaymentResult result = method.charge(reservation.getDepositAmount(), "RES-" + reservation.getId());
 
         Payment payment = reservation.registerPayment(type, result.status(), result.transactionRef()); // Creator
-        reservations.saveAndFlush(reservation);
+        // The reservation is already managed: flush() persists the new payment on this same
+        // instance (save() would merge and hand back a copy, leaving payment.getId() null).
+        reservations.flush();
         if (payment.isApproved()) {
             notifications.reservationConfirmed(reservation, payment);
         }
