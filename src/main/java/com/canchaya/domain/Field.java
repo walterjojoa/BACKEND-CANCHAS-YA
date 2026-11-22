@@ -43,12 +43,23 @@ public class Field {
     @Column(nullable = false)
     private boolean active = true;
 
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private Zone zone;
+
+    /**
+     * TRUE for real fields loaded from public data whose owners have not joined
+     * the platform: their price and opening hours are estimates.
+     */
+    @Column(name = "reference_listing", nullable = false)
+    private boolean referenceListing = false;
+
     protected Field() {
         // required by JPA
     }
 
     public Field(String name, String address, Double latitude, Double longitude,
-                 BigDecimal pricePerHour, User owner) {
+                 BigDecimal pricePerHour, User owner, Zone zone) {
         if (pricePerHour == null || pricePerHour.signum() <= 0) {
             throw new BusinessException("Price per hour must be greater than zero");
         }
@@ -61,6 +72,13 @@ public class Field {
         this.longitude = longitude;
         this.pricePerHour = pricePerHour;
         this.owner = owner;
+        this.zone = zone;
+    }
+
+    /** Marks a real field loaded from public data (owner not on the platform). */
+    public Field asReferenceListing() {
+        this.referenceListing = true;
+        return this;
     }
 
     // ------------------------------------------------------------------
@@ -127,5 +145,7 @@ public class Field {
     public BigDecimal getPricePerHour() { return pricePerHour; }
     public User getOwner() { return owner; }
     public boolean isActive() { return active; }
+    public Zone getZone() { return zone; }
+    public boolean isReferenceListing() { return referenceListing; }
     public List<Schedule> getSchedules() { return Collections.unmodifiableList(schedules); }
 }

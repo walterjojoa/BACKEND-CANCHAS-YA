@@ -1,6 +1,7 @@
 package com.canchaya.repository;
 
 import com.canchaya.domain.Field;
+import com.canchaya.domain.Zone;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -14,6 +15,8 @@ import java.util.Optional;
 public interface FieldRepository extends JpaRepository<Field, Long> {
 
     List<Field> findByActiveTrueOrderByNameAsc();
+
+    List<Field> findByActiveTrueAndZoneOrderByNameAsc(Zone zone);
 
     List<Field> findByOwnerIdOrderByNameAsc(Long ownerId);
 

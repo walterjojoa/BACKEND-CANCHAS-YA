@@ -2,6 +2,7 @@ package com.canchaya.dto;
 
 import com.canchaya.domain.Field;
 import com.canchaya.domain.Schedule;
+import com.canchaya.domain.Zone;
 import jakarta.validation.constraints.*;
 
 import java.math.BigDecimal;
@@ -20,7 +21,8 @@ public final class FieldDtos {
             @NotBlank @Size(max = 200) String address,
             @DecimalMin("-90") @DecimalMax("90") Double latitude,
             @DecimalMin("-180") @DecimalMax("180") Double longitude,
-            @NotNull @Positive BigDecimal pricePerHour) {
+            @NotNull @Positive BigDecimal pricePerHour,
+            Zone zone) {
     }
 
     public record ScheduleRequest(
@@ -35,12 +37,18 @@ public final class FieldDtos {
         }
     }
 
+    /**
+     * referenceListing = true means a real field loaded from public data whose owner has not
+     * joined CanchaYa: the frontend should show its price and hours as estimates.
+     */
     public record FieldResponse(Long id, String name, String address, Double latitude, Double longitude,
-                                BigDecimal pricePerHour, Long ownerId, String ownerName,
+                                BigDecimal pricePerHour, Zone zone, boolean referenceListing,
+                                Long ownerId, String ownerName,
                                 List<ScheduleResponse> schedules) {
         public static FieldResponse from(Field f) {
             return new FieldResponse(f.getId(), f.getName(), f.getAddress(), f.getLatitude(), f.getLongitude(),
-                    f.getPricePerHour(), f.getOwner().getId(), f.getOwner().getName(),
+                    f.getPricePerHour(), f.getZone(), f.isReferenceListing(),
+                    f.getOwner().getId(), f.getOwner().getName(),
                     f.getSchedules().stream()
                             .sorted(Comparator.comparing(Schedule::getDayOfWeek)) // Monday -> Sunday
                             .map(ScheduleResponse::from).toList());

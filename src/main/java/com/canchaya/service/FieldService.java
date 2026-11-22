@@ -4,6 +4,7 @@ import com.canchaya.domain.Field;
 import com.canchaya.domain.Reservation;
 import com.canchaya.domain.Schedule;
 import com.canchaya.domain.User;
+import com.canchaya.domain.Zone;
 import com.canchaya.dto.FieldDtos.CreateFieldRequest;
 import com.canchaya.dto.FieldDtos.FieldResponse;
 import com.canchaya.dto.FieldDtos.ScheduleRequest;
@@ -36,8 +37,11 @@ public class FieldService {
     }
 
     @Transactional(readOnly = true)
-    public List<FieldResponse> listActive() {
-        return fields.findByActiveTrueOrderByNameAsc().stream().map(FieldResponse::from).toList();
+    public List<FieldResponse> listActive(Zone zone) {
+        List<Field> found = zone == null
+                ? fields.findByActiveTrueOrderByNameAsc()
+                : fields.findByActiveTrueAndZoneOrderByNameAsc(zone);
+        return found.stream().map(FieldResponse::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -54,7 +58,7 @@ public class FieldService {
     public FieldResponse create(Long ownerId, CreateFieldRequest request) {
         User owner = users.findById(ownerId).orElseThrow(() -> new NotFoundException("User " + ownerId + " not found"));
         Field field = new Field(request.name().trim(), request.address().trim(), request.latitude(),
-                request.longitude(), request.pricePerHour(), owner);
+                request.longitude(), request.pricePerHour(), owner, request.zone());
         return FieldResponse.from(fields.save(field));
     }
 

@@ -25,7 +25,7 @@ class FieldTest {
     void setUp() {
         User owner = new User("Owner", "owner@test.co", "x", Role.OWNER);
         player = new User("Player", "player@test.co", "x", Role.PLAYER);
-        field = new Field("El Ejido", "Pasto", null, null, new BigDecimal("80000"), owner);
+        field = new Field("El Ejido", "Pasto", null, null, new BigDecimal("80000"), owner, Zone.CENTER);
         field.setSchedule(DayOfWeek.SATURDAY, 8, 22);
     }
 
@@ -76,7 +76,7 @@ class FieldTest {
 
     @Test
     void onlyOwnersCanPublishFields() {
-        assertThatThrownBy(() -> new Field("X", "Pasto", null, null, BigDecimal.TEN, player))
+        assertThatThrownBy(() -> new Field("X", "Pasto", null, null, BigDecimal.TEN, player, null))
                 .isInstanceOf(BusinessException.class);
     }
 

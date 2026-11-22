@@ -1,5 +1,6 @@
 package com.canchaya.web;
 
+import com.canchaya.domain.Zone;
 import com.canchaya.dto.FieldDtos.CreateFieldRequest;
 import com.canchaya.dto.FieldDtos.FieldResponse;
 import com.canchaya.dto.FieldDtos.ScheduleRequest;
@@ -26,9 +27,10 @@ public class FieldController {
         this.fieldService = fieldService;
     }
 
+    /** GET /api/fields or GET /api/fields?zone=NORTH (NORTH, CENTER, WEST, EAST, SOUTH). */
     @GetMapping("/fields")
-    public List<FieldResponse> list() {
-        return fieldService.listActive();
+    public List<FieldResponse> list(@RequestParam(required = false) Zone zone) {
+        return fieldService.listActive(zone);
     }
 
     @GetMapping("/fields/{id}")

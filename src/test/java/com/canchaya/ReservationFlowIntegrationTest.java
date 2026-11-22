@@ -38,7 +38,7 @@ class ReservationFlowIntegrationTest {
         JsonNode field = body(mvc.perform(post("/api/fields").header("Authorization", bearer(ownerToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"name":"El Ejido","address":"Pasto","pricePerHour":80000}
+                                {"name":"El Ejido","address":"Pasto","pricePerHour":80000,"zone":"CENTER"}
                                 """))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
         long fieldId = field.get("id").asLong();
@@ -92,6 +92,26 @@ class ReservationFlowIntegrationTest {
         mvc.perform(get("/api/owner/reservations").header("Authorization", bearer(ownerToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(reservationId));
+    }
+
+    @Test
+    void fieldsCanBeFilteredByZone() throws Exception {
+        String ownerToken = register("Zone Owner", "zone-owner@test.co", "OWNER");
+        mvc.perform(post("/api/fields").header("Authorization", bearer(ownerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Cancha Zona Sur\",\"address\":\"Pasto\",\"pricePerHour\":70000,\"zone\":\"SOUTH\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.zone").value("SOUTH"))
+                .andExpect(jsonPath("$.referenceListing").value(false));
+
+        mvc.perform(get("/api/fields").param("zone", "SOUTH"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.name == 'Cancha Zona Sur')]").exists());
+        mvc.perform(get("/api/fields").param("zone", "NORTH"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.name == 'Cancha Zona Sur')]").doesNotExist());
+        mvc.perform(get("/api/fields").param("zone", "MARS"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
