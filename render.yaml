@@ -23,7 +23,7 @@ services:
         generateValue: true
       # Frontend URL(s), comma separated
       - key: CORS_ALLOWED_ORIGINS
-        value: http://localhost:5173
+        value: https://canchaya-frontend.onrender.com,http://localhost:5173
       # Demo data comes from the database repo (seeds/), not from the backend
       - key: SEED_DEMO_DATA
         value: "false"
