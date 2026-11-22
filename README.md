@@ -49,9 +49,25 @@ La API queda en `http://localhost:8080`. Al arrancar se cargan datos de prueba:
 | Usuario | Contraseña | Rol |
 |---|---|---|
 | `owner@canchaya.co` | `canchaya123` | OWNER (dueño de canchas) |
-| `player@canchaya.co` | `canchaya123` | PLAYER (jugador) |
+| `player@canchaya.co`, `laura@canchaya.co`, `mateo@canchaya.co` | `canchaya123` | PLAYER (jugador) |
+| `admin@canchaya.co` | `canchaya123` | ADMIN |
 
-Y dos canchas: **Sintética El Ejido** ($80.000/h) y **La Bombonera Pasto** ($90.000/h).
+Y las **38 canchas sintéticas reales de Pasto**, clasificadas por zona, desde [`src/main/resources/data/pasto_fields.csv`](src/main/resources/data/pasto_fields.csv). Es el mismo archivo que usa el repositorio de la base de datos.
+
+### Canchas reales de Pasto
+
+| Zona | `zone` | Canchas |
+|---|---|---|
+| Norte | `NORTH` | 8 |
+| Centro | `CENTER` | 10 |
+| Occidente | `WEST` | 2 |
+| Oriente | `EAST` | 3 |
+| Sur | `SOUTH` | 15 |
+
+- Vienen de las fichas públicas de Google Maps (noviembre de 2026). Son negocios reales que **no se han unido a CanchaYa**, por eso la API las devuelve con `"referenceListing": true`. Pertenecen a la cuenta técnica `referencias@canchaya.co`, en la que nadie puede iniciar sesión.
+- **El precio ($80.000/h) y el horario (08:00–22:00) son estimados**, porque ninguna publica su tarifa. El frontend debería mostrarlos como "aprox.". La única excepción es La Pasión del Fútbol, que publica su horario (06:00–22:00).
+- No se guardan teléfonos ni calificaciones de Google.
+- Las canchas que publique un dueño registrado tienen `"referenceListing": false`.
 
 Consola de la base de datos H2: `http://localhost:8080/h2-console` (JDBC URL `jdbc:h2:mem:canchaya`, usuario `sa`, sin contraseña).
 
@@ -70,6 +86,7 @@ Los endpoints protegidos necesitan el encabezado `Authorization: Bearer <token>`
 | POST | `/api/auth/register` | Público | Crear cuenta (`role`: `PLAYER` u `OWNER`) |
 | POST | `/api/auth/login` | Público | Iniciar sesión, devuelve el JWT |
 | GET | `/api/fields` | Público | Listar canchas activas |
+| GET | `/api/fields?zone=NORTH` | Público | Canchas de una zona (`NORTH`, `CENTER`, `WEST`, `EAST`, `SOUTH`) |
 | GET | `/api/fields/{id}` | Público | Detalle de una cancha con sus horarios |
 | GET | `/api/fields/{id}/availability?date=2026-12-05` | Público | Franjas de una hora libres/ocupadas ese día |
 | POST | `/api/fields` | OWNER | Publicar una cancha |
