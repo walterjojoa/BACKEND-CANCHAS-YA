@@ -4,6 +4,9 @@ API REST para reservar canchas sintéticas en Pasto. Hecha en **Java 21 + Spring
 
 > El código está en inglés; esta documentación está en español para la exposición del curso de Arquitectura de Software.
 
+**API en producción:** https://canchaya-backend-dn7w.onrender.com/api/health (Render, plan gratuito: la primera petición tras un rato inactiva tarda ~50 s en despertar).
+Base de datos: PostgreSQL en Neon, instalada con [BASE-DE-DATOS-CANCHAS-YA](https://github.com/walterjojoa/BASE-DE-DATOS-CANCHAS-YA).
+
 ---
 
 ## Tabla de contenido
