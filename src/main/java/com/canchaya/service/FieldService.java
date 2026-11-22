@@ -7,6 +7,8 @@ import com.canchaya.domain.User;
 import com.canchaya.domain.Zone;
 import com.canchaya.dto.FieldDtos.CreateFieldRequest;
 import com.canchaya.dto.FieldDtos.FieldResponse;
+import com.canchaya.dto.FieldDtos.NearbyFieldResponse;
+import com.canchaya.exception.BusinessException;
 import com.canchaya.dto.FieldDtos.ScheduleRequest;
 import com.canchaya.dto.FieldDtos.SlotResponse;
 import com.canchaya.exception.ForbiddenException;
@@ -19,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -42,6 +45,22 @@ public class FieldService {
                 ? fields.findByActiveTrueOrderByNameAsc()
                 : fields.findByActiveTrueAndZoneOrderByNameAsc(zone);
         return found.stream().map(FieldResponse::from).toList();
+    }
+
+    /** Active fields closest to a point, nearest first. */
+    @Transactional(readOnly = true)
+    public List<NearbyFieldResponse> nearby(double lat, double lng, int limit) {
+        if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+            throw new BusinessException("Invalid coordinates");
+        }
+        int safeLimit = Math.max(1, Math.min(limit, 50));
+        return fields.findByActiveTrueOrderByNameAsc().stream()
+                .filter(f -> f.distanceKmTo(lat, lng) != null)
+                .map(f -> new NearbyFieldResponse(FieldResponse.from(f),
+                        Math.round(f.distanceKmTo(lat, lng) * 100) / 100.0))   // Expert
+                .sorted(Comparator.comparingDouble(NearbyFieldResponse::distanceKm))
+                .limit(safeLimit)
+                .toList();
     }
 
     @Transactional(readOnly = true)

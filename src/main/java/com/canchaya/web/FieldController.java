@@ -3,6 +3,7 @@ package com.canchaya.web;
 import com.canchaya.domain.Zone;
 import com.canchaya.dto.FieldDtos.CreateFieldRequest;
 import com.canchaya.dto.FieldDtos.FieldResponse;
+import com.canchaya.dto.FieldDtos.NearbyFieldResponse;
 import com.canchaya.dto.FieldDtos.ScheduleRequest;
 import com.canchaya.dto.FieldDtos.SlotResponse;
 import com.canchaya.security.AuthenticatedUser;
@@ -31,6 +32,13 @@ public class FieldController {
     @GetMapping("/fields")
     public List<FieldResponse> list(@RequestParam(required = false) Zone zone) {
         return fieldService.listActive(zone);
+    }
+
+    /** GET /api/fields/nearby?lat=1.21&lng=-77.28&limit=10 : nearest active fields first. */
+    @GetMapping("/fields/nearby")
+    public List<NearbyFieldResponse> nearby(@RequestParam double lat, @RequestParam double lng,
+                                            @RequestParam(defaultValue = "10") int limit) {
+        return fieldService.nearby(lat, lng, limit);
     }
 
     @GetMapping("/fields/{id}")

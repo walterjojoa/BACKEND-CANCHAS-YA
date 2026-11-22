@@ -57,4 +57,8 @@ public final class FieldDtos {
 
     public record SlotResponse(int hour, boolean available) {
     }
+
+    /** A field plus its straight-line distance (km) from the user's position. */
+    public record NearbyFieldResponse(FieldResponse field, double distanceKm) {
+    }
 }

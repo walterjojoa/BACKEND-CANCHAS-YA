@@ -75,6 +75,17 @@ class FieldTest {
     }
 
     @Test
+    void calculatesDistanceToAPoint() {
+        User owner = new User("Owner", "o2@test.co", "x", Role.OWNER);
+        // Canchas Sintéticas Monumental -> Plaza de Nariño (about 1.2 km)
+        Field monumental = new Field("Monumental", "Pasto", 1.22063, -77.28655, BigDecimal.TEN, owner, Zone.NORTH);
+
+        assertThat(monumental.distanceKmTo(1.22063, -77.28655)).isZero();
+        assertThat(monumental.distanceKmTo(1.21361, -77.28111)).isBetween(0.9, 1.3);
+        assertThat(field.distanceKmTo(1.2, -77.2)).isNull();   // no coordinates
+    }
+
+    @Test
     void onlyOwnersCanPublishFields() {
         assertThatThrownBy(() -> new Field("X", "Pasto", null, null, BigDecimal.TEN, player, null))
                 .isInstanceOf(BusinessException.class);

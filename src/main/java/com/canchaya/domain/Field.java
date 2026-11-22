@@ -129,6 +129,24 @@ public class Field {
         return schedules.stream().anyMatch(s -> s.covers(day, startHour, endHour));
     }
 
+    /**
+     * GRASP Information Expert: the field knows its own coordinates, so it calculates
+     * how far it is from a point (haversine formula, straight-line km).
+     * Returns null when the field has no coordinates.
+     */
+    public Double distanceKmTo(double lat, double lng) {
+        if (latitude == null || longitude == null) {
+            return null;
+        }
+        final double earthRadiusKm = 6371.0;
+        double dLat = Math.toRadians(latitude - lat);
+        double dLng = Math.toRadians(longitude - lng);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat)) * Math.cos(Math.toRadians(latitude))
+                * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
     public Optional<Schedule> scheduleFor(DayOfWeek day) {
         return schedules.stream().filter(s -> s.getDayOfWeek() == day).findFirst();
     }

@@ -115,6 +115,24 @@ class ReservationFlowIntegrationTest {
     }
 
     @Test
+    void nearbyReturnsClosestFieldsFirst() throws Exception {
+        String ownerToken = register("Near Owner", "near-owner@test.co", "OWNER");
+        for (String body : new String[]{
+                "{\"name\":\"Lejana\",\"address\":\"Pasto\",\"latitude\":1.16539,\"longitude\":-77.29776,\"pricePerHour\":70000}",
+                "{\"name\":\"Cercana\",\"address\":\"Pasto\",\"latitude\":1.21400,\"longitude\":-77.28100,\"pricePerHour\":70000}"}) {
+            mvc.perform(post("/api/fields").header("Authorization", bearer(ownerToken))
+                    .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isCreated());
+        }
+
+        mvc.perform(get("/api/fields/nearby").param("lat", "1.21361").param("lng", "-77.28111").param("limit", "50"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].field.name").value("Cercana"))
+                .andExpect(jsonPath("$[0].distanceKm").value(org.hamcrest.Matchers.lessThan(0.1)));
+        mvc.perform(get("/api/fields/nearby").param("lat", "200").param("lng", "0"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void protectedEndpointsRequireToken() throws Exception {
         mvc.perform(get("/api/reservations/me")).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/fields")).andExpect(status().isOk());
