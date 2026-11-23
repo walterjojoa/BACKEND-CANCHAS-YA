@@ -30,7 +30,7 @@ Base de datos: PostgreSQL en Neon, instalada con [BASE-DE-DATOS-CANCHAS-YA](http
 | Framework | Spring Boot 3.3 (Web, Data JPA, Validation, Security, Mail) |
 | Seguridad | JWT (jjwt) + contraseñas con BCrypt |
 | Base de datos | H2 en memoria (desarrollo) · PostgreSQL / Neon (producción) |
-| Pagos | Wompi, Nequi, Daviplata (simulados en esta versión) |
+| Pagos | Wompi sandbox real (tarjeta, PSE, Nequi, botón Bancolombia) · Nequi y Daviplata directos simulados |
 | Pruebas | JUnit 5, AssertJ, MockMvc |
 
 ## Cómo ejecutarlo
@@ -98,7 +98,10 @@ Los endpoints protegidos necesitan el encabezado `Authorization: Bearer <token>`
 | POST | `/api/reservations` | PLAYER | Reservar una franja |
 | GET | `/api/reservations/me` | Autenticado | Mis reservas |
 | GET | `/api/reservations/{id}` | Jugador o dueño | Detalle de una reserva |
-| POST | `/api/reservations/{id}/payments` | Jugador | Pagar el anticipo (`WOMPI`, `NEQUI`, `DAVIPLATA`) |
+| POST | `/api/reservations/{id}/payments/wompi` | Jugador | Datos firmados para abrir el checkout de Wompi |
+| POST | `/api/payments/wompi/confirm` | Jugador | Al volver de Wompi: consulta la transacción y registra el pago |
+| POST | `/api/payments/wompi/events` | Wompi | Webhook de Wompi (verificado con checksum SHA-256) |
+| POST | `/api/reservations/{id}/payments` | Jugador | Pago directo simulado (`NEQUI`, `DAVIPLATA`) |
 | POST | `/api/reservations/{id}/cancel` | Jugador | Cancelar la reserva |
 | GET | `/api/health` | Público | Estado del servicio |
 
@@ -220,7 +223,6 @@ En vez de un "`SistemaService`" que lo haga todo, hay un servicio por tema:
 
 ```
 PaymentMethod
-├── WompiPaymentMethod      (tarjeta, convierte a centavos)
 ├── NequiPaymentMethod
 └── DaviplataPaymentMethod  (agregado después sin tocar ninguna otra clase)
 ```
@@ -245,7 +247,7 @@ Ninguna de estas clases es un concepto del mundo de las canchas, pero evitan ens
 > *Poner un intermediario entre dos componentes para que no queden acoplados directamente.*
 
 - `PaymentService` está entre la **reserva** y los **proveedores de pago**: la reserva nunca habla con Wompi.
-- `WompiPaymentMethod` está entre **nuestro negocio** (monto en pesos + referencia) y el **API de Wompi** (`WompiClient`: centavos, moneda, llave pública). Si Wompi cambia su API, solo cambia ese intermediario.
+- `WompiCheckoutService` está entre **nuestro negocio** (reserva, monto en pesos) y el **API de Wompi** (`WompiClient`: referencia, centavos, firmas SHA-256). Si Wompi cambia su API, solo cambia ese intermediario.
 - `NotificationService` está entre los servicios y el **canal de envío** (`NotificationSender`).
 
 ### 9. Variaciones protegidas (Protected Variations)
@@ -299,8 +301,27 @@ ReservationController.pay()               ← Controller
 
 4. Health check path: `/api/health`.
 
+## Pagos con Wompi (sandbox)
+
+Se usa el **Web Checkout** de Wompi en modo pruebas: **no se mueve dinero real**.
+
+1. El frontend pide `POST /api/reservations/{id}/payments/wompi`; el backend crea una referencia `RES-{id}-{timestamp}` y la firma de integridad `SHA-256(referencia + centavos + COP + secreto)`.
+2. El navegador abre `https://checkout.wompi.co/p/` y el jugador paga con tarjeta, PSE, Nequi o botón Bancolombia.
+3. Wompi lo devuelve a `/mis-reservas?wompi=1&id=<transacción>`; el frontend llama `POST /api/payments/wompi/confirm`.
+4. El backend **consulta la transacción a Wompi** (no confía en el navegador), verifica monto y moneda y registra el pago. Si queda aprobado, la reserva pasa a `CONFIRMED`.
+5. Wompi también avisa por webhook a `/api/payments/wompi/events`. Ambos caminos son idempotentes.
+
+Variables de entorno (se sacan de comercios.wompi.co → Desarrolladores, ambiente de pruebas):
+
+| Variable | Valor |
+|---|---|
+| `WOMPI_PUBLIC_KEY` | `pub_test_...` |
+| `WOMPI_INTEGRITY_SECRET` | `test_integrity_...` |
+| `WOMPI_EVENTS_SECRET` | `test_events_...` |
+| `WOMPI_API_URL` | opcional, por defecto `https://sandbox.wompi.co/v1` |
+
+Datos de prueba: tarjeta `4242 4242 4242 4242` (aprobada) o `4111 1111 1111 1111` (rechazada), cualquier CVC y fecha futura.
+
 ## Pendiente
 
-- Integración real con el sandbox de Wompi (hoy `WompiClient` simula la transacción).
-- Webhook de confirmación de pagos.
 - Reportes de ingresos para el dueño.

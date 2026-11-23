@@ -27,3 +27,10 @@ services:
       # Demo data comes from the database repo (seeds/), not from the backend
       - key: SEED_DEMO_DATA
         value: "false"
+      # Wompi sandbox keys (comercios.wompi.co > Desarrolladores). Test keys: no real money.
+      - key: WOMPI_PUBLIC_KEY
+        sync: false
+      - key: WOMPI_INTEGRITY_SECRET
+        sync: false
+      - key: WOMPI_EVENTS_SECRET
+        sync: false
