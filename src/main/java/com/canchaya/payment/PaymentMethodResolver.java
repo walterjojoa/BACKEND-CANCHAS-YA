@@ -24,6 +24,9 @@ public class PaymentMethodResolver {
 
     public PaymentMethod resolve(PaymentMethodType type) {
         PaymentMethod method = methods.get(type);
+        if (type == PaymentMethodType.WOMPI) {
+            throw new BusinessException("Wompi payments go through POST /api/reservations/{id}/payments/wompi (checkout)");
+        }
         if (method == null) {
             throw new BusinessException("Payment method not supported: " + type);
         }

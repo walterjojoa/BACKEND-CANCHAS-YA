@@ -45,4 +45,17 @@ public final class ReservationDtos {
                     p.getStatus(), p.getTransactionRef(), p.getReservation().getStatus());
         }
     }
+
+    /** Data the browser needs to open Wompi's Web Checkout. */
+    public record WompiCheckoutResponse(Long reservationId, String publicKey, String reference,
+                                        long amountInCents, String currency, String integritySignature) {
+    }
+
+    public record WompiConfirmRequest(@NotBlank String transactionId) {
+    }
+
+    /** status: APPROVED, DECLINED or PENDING (still being processed by the bank). */
+    public record WompiResultResponse(Long reservationId, String transactionId, String status,
+                                      String paymentMethodType, ReservationStatus reservationStatus) {
+    }
 }

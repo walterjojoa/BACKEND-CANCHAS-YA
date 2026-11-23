@@ -33,6 +33,7 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**", "/api/health", "/h2-console/**", "/error").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/payments/wompi/events").permitAll() // Wompi webhook (checksum-verified)
                         .requestMatchers(HttpMethod.GET, "/api/fields", "/api/fields/*", "/api/fields/*/availability").permitAll()
                         .requestMatchers("/api/owner/**").hasRole("OWNER")
                         .requestMatchers(HttpMethod.POST, "/api/fields", "/api/fields/*/schedules").hasRole("OWNER")
