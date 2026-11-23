@@ -1,16 +1,25 @@
 package com.canchaya;
 
+import com.canchaya.payment.WompiClient;
+import com.canchaya.payment.WompiTransaction;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Optional;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -27,6 +36,9 @@ class ReservationFlowIntegrationTest {
 
     @Autowired
     private ObjectMapper json;
+
+    @MockBean
+    private WompiClient wompi;
 
     @Test
     void ownerPublishesFieldAndPlayerBooksAndPays() throws Exception {
@@ -92,6 +104,65 @@ class ReservationFlowIntegrationTest {
         mvc.perform(get("/api/owner/reservations").header("Authorization", bearer(ownerToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(reservationId));
+    }
+
+    @Test
+    void playerPaysDepositThroughWompiCheckout() throws Exception {
+        String ownerToken = register("Wompi Owner", "wompi-owner@test.co", "OWNER");
+        String playerToken = register("Wompi Player", "wompi-player@test.co", "PLAYER");
+        String otherToken = register("Other Player", "wompi-other@test.co", "PLAYER");
+        LocalDate date = LocalDate.now(ZoneId.of("America/Bogota")).plusDays(4);
+        long fieldId = body(mvc.perform(post("/api/fields").header("Authorization", bearer(ownerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Wompi Arena\",\"address\":\"Pasto\",\"pricePerHour\":50000}"))
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+        mvc.perform(post("/api/fields/" + fieldId + "/schedules").header("Authorization", bearer(ownerToken))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"dayOfWeek\":\"" + date.getDayOfWeek() + "\",\"openingHour\":8,\"closingHour\":22}"));
+        long reservationId = body(mvc.perform(post("/api/reservations").header("Authorization", bearer(playerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"fieldId\":" + fieldId + ",\"date\":\"" + date + "\",\"startHour\":10,\"endHour\":12}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asLong();
+
+        when(wompi.isConfigured()).thenReturn(true);
+        when(wompi.publicKey()).thenReturn("pub_test_x");
+        when(wompi.integritySignature(anyString(), anyLong(), anyString())).thenReturn("signed");
+
+        // Step 1: signed checkout data (deposit 30 % of 100 000 = 30 000 pesos = 3 000 000 cents)
+        String reference = body(mvc.perform(post("/api/reservations/" + reservationId + "/payments/wompi")
+                        .header("Authorization", bearer(playerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.amountInCents").value(3_000_000))
+                .andExpect(jsonPath("$.currency").value("COP"))
+                .andExpect(jsonPath("$.integritySignature").value("signed"))
+                .andReturn().getResponse().getContentAsString()).get("reference").asText();
+
+        // Still processing at the bank -> PENDING, nothing recorded
+        when(wompi.findTransaction("tx-1")).thenReturn(Optional.of(
+                new WompiTransaction("tx-1", reference, 3_000_000, "COP", "PENDING", "PSE")));
+        confirm(playerToken, "tx-1").andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.reservationStatus").value("PENDING_PAYMENT"));
+
+        // Another player cannot confirm someone else's payment
+        confirm(otherToken, "tx-1").andExpect(status().isForbidden());
+
+        // Approved -> reservation confirmed; confirming twice is harmless
+        when(wompi.findTransaction("tx-1")).thenReturn(Optional.of(
+                new WompiTransaction("tx-1", reference, 3_000_000, "COP", "APPROVED", "PSE")));
+        confirm(playerToken, "tx-1").andExpect(jsonPath("$.status").value("APPROVED"))
+                .andExpect(jsonPath("$.paymentMethodType").value("PSE"))
+                .andExpect(jsonPath("$.reservationStatus").value("CONFIRMED"));
+        confirm(playerToken, "tx-1").andExpect(status().isOk()).andExpect(jsonPath("$.status").value("APPROVED"));
+
+        // Webhook with a bad checksum is rejected
+        when(wompi.isAuthentic(any())).thenReturn(false);
+        mvc.perform(post("/api/payments/wompi/events").contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    private org.springframework.test.web.servlet.ResultActions confirm(String token, String transactionId) throws Exception {
+        return mvc.perform(post("/api/payments/wompi/confirm").header("Authorization", bearer(token))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"transactionId\":\"" + transactionId + "\"}"));
     }
 
     @Test
