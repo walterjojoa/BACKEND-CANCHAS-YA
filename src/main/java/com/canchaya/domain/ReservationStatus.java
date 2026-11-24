@@ -1,9 +1,11 @@
 package com.canchaya.domain;
 
+/** Estados posibles de una reserva. */
 public enum ReservationStatus {
-    /** Created, waiting for the deposit to be paid. */
+    /** Creada, esperando que se pague el anticipo. */
     PENDING_PAYMENT,
-    /** Deposit paid: the slot is secured. */
+    /** Anticipo pagado: el turno queda asegurado. */
     CONFIRMED,
+    /** Cancelada por el jugador: el turno vuelve a quedar libre. */
     CANCELLED
 }

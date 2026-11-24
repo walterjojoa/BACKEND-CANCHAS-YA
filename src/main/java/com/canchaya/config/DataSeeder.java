@@ -26,22 +26,23 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Loads demo users and the real synthetic fields of Pasto when the database is empty
- * (canchaya.seed=true, used with the in-memory H2 database).
+ * Carga usuarios de prueba y las canchas sintéticas reales de Pasto cuando la base de datos
+ * está vacía (canchaya.seed=true, se usa con la base H2 en memoria de desarrollo).
  * <p>
- * The fields come from data/pasto_fields.csv, the same file the database repository
- * (BASE-DE-DATOS-CANCHAS-YA) uses. They are real businesses taken from public Google Maps
- * listings that have NOT joined CanchaYa, so they are reference listings: their price and
- * opening hours are estimates, and they belong to a "reference" account nobody can log into.
+ * Las canchas salen de data/pasto_fields.csv, el mismo archivo que usa el repositorio de la
+ * base de datos (BASE-DE-DATOS-CANCHAS-YA). Son negocios reales tomados de Google Maps que
+ * NO se han unido a CanchaYa, así que son canchas "de referencia": su precio y horario son
+ * estimados y pertenecen a una cuenta "referencias" en la que nadie puede iniciar sesión.
  */
 @Component
-@ConditionalOnProperty(name = "canchaya.seed", havingValue = "true")
-public class DataSeeder implements CommandLineRunner {
+@ConditionalOnProperty(name = "canchaya.seed", havingValue = "true") // solo si seed=true
+public class DataSeeder implements CommandLineRunner {              // CommandLineRunner: corre al arrancar la app
 
     private static final Logger log = LoggerFactory.getLogger(DataSeeder.class);
     private static final String FIELDS_CSV = "data/pasto_fields.csv";
+    /** Precio estimado por hora para las canchas de referencia. */
     private static final BigDecimal ESTIMATED_PRICE = new BigDecimal("80000");
-    /** Not a BCrypt hash, so the reference account can never log in. */
+    /** No es un hash BCrypt, así que la cuenta de referencia nunca puede iniciar sesión. */
     private static final String LOGIN_DISABLED = "!login-disabled";
 
     private final UserRepository users;
@@ -57,9 +58,11 @@ public class DataSeeder implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
+        // Si ya hay usuarios, la BD ya tiene datos: no se carga nada.
         if (users.count() > 0) {
             return;
         }
+        // Todos los usuarios demo usan la misma clave: canchaya123.
         String password = passwordEncoder.encode("canchaya123");
         User reference = users.save(new User("CanchaYa - Canchas de referencia", "referencias@canchaya.co",
                 LOGIN_DISABLED, Role.OWNER));
@@ -75,11 +78,13 @@ public class DataSeeder implements CommandLineRunner {
                 pastoFields.size());
     }
 
+    /** Lee el CSV y crea una cancha de referencia por cada fila, con el mismo horario todos los días. */
     private List<Field> readPastoFields(User reference) {
         List<Field> result = new ArrayList<>();
+        // try-with-resources: el archivo se cierra solo al terminar.
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(
                 new ClassPathResource(FIELDS_CSV).getInputStream(), StandardCharsets.UTF_8))) {
-            reader.readLine(); // header: name,address,latitude,longitude,zone,opening_hour,closing_hour,hours_source
+            reader.readLine(); // encabezado: name,address,latitude,longitude,zone,opening_hour,closing_hour,hours_source
             String line;
             while ((line = reader.readLine()) != null) {
                 if (line.isBlank()) {
@@ -91,7 +96,7 @@ public class DataSeeder implements CommandLineRunner {
                 int opening = Integer.parseInt(c.get(5));
                 int closing = Integer.parseInt(c.get(6));
                 for (DayOfWeek day : DayOfWeek.values()) {
-                    field.setSchedule(day, opening, closing);   // Creator: the field builds its schedules
+                    field.setSchedule(day, opening, closing);   // Creador: la cancha construye sus horarios
                 }
                 result.add(field);
             }
@@ -101,28 +106,31 @@ public class DataSeeder implements CommandLineRunner {
         return result;
     }
 
-    /** Minimal CSV split: commas inside double quotes are kept (addresses like "Cl. 16 #35-26, Pasto"). */
+    /**
+     * Separador de CSV mínimo: respeta las comas dentro de comillas dobles
+     * (direcciones como "Cl. 16 #35-26, Pasto") y "" como comilla escapada.
+     */
     static List<String> splitCsv(String line) {
         List<String> cells = new ArrayList<>();
         StringBuilder cell = new StringBuilder();
-        boolean quoted = false;
+        boolean quoted = false; // ¿estamos dentro de comillas?
         for (int i = 0; i < line.length(); i++) {
             char ch = line.charAt(i);
             if (ch == '"') {
                 if (quoted && i + 1 < line.length() && line.charAt(i + 1) == '"') {
-                    cell.append('"');
+                    cell.append('"'); // "" dentro de comillas = una comilla literal
                     i++;
                 } else {
                     quoted = !quoted;
                 }
             } else if (ch == ',' && !quoted) {
-                cells.add(cell.toString());
+                cells.add(cell.toString()); // fin de la celda
                 cell.setLength(0);
             } else {
                 cell.append(ch);
             }
         }
-        cells.add(cell.toString());
+        cells.add(cell.toString()); // última celda
         return cells;
     }
 }

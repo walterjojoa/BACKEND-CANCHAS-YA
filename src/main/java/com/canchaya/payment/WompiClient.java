@@ -14,21 +14,22 @@ import java.util.HexFormat;
 import java.util.Optional;
 
 /**
- * Low-level client for the Wompi API (sandbox by default, so no real money moves).
- * It speaks Wompi's language: amounts in cents, SHA-256 signatures, snake_case JSON.
- * Only {@link com.canchaya.service.WompiCheckoutService} talks to it.
+ * Cliente de bajo nivel para la API de Wompi (sandbox por defecto, así que no se mueve dinero real).
+ * Habla el idioma de Wompi: montos en centavos, firmas SHA-256 y JSON en snake_case.
+ * Solo {@link com.canchaya.service.WompiCheckoutService} lo usa.
  * <p>
- * Keys come from the environment (WOMPI_PUBLIC_KEY, WOMPI_INTEGRITY_SECRET,
- * WOMPI_EVENTS_SECRET); they are never stored in the repository.
+ * Las llaves vienen de variables de entorno (WOMPI_PUBLIC_KEY, WOMPI_INTEGRITY_SECRET,
+ * WOMPI_EVENTS_SECRET); nunca se guardan en el repositorio.
  */
 @Component
 public class WompiClient {
 
-    private final String publicKey;
-    private final String integritySecret;
-    private final String eventsSecret;
-    private final RestClient http;
+    private final String publicKey;       // llave pública: la ve el navegador
+    private final String integritySecret; // secreto para firmar el monto del checkout
+    private final String eventsSecret;    // secreto para verificar los webhooks
+    private final RestClient http;        // cliente HTTP de Spring apuntando a la API de Wompi
 
+    /** @Value lee cada propiedad; si no está definida, queda vacía (":" = valor por defecto). */
     public WompiClient(@Value("${canchaya.wompi.public-key:}") String publicKey,
                        @Value("${canchaya.wompi.integrity-secret:}") String integritySecret,
                        @Value("${canchaya.wompi.events-secret:}") String eventsSecret,
@@ -39,6 +40,7 @@ public class WompiClient {
         this.http = RestClient.builder().baseUrl(apiUrl).build();
     }
 
+    /** true si hay llave pública y secreto de integridad (lo mínimo para abrir el checkout). */
     public boolean isConfigured() {
         return !publicKey.isBlank() && !integritySecret.isBlank();
     }
@@ -47,28 +49,34 @@ public class WompiClient {
         return publicKey;
     }
 
-    /** Integrity signature Wompi requires on the checkout: SHA-256(reference + cents + currency + secret). */
+    /**
+     * Firma de integridad que Wompi exige en el checkout: SHA-256(referencia + centavos + moneda + secreto).
+     * Como el secreto solo lo conoce el servidor, nadie puede cambiar el monto en el navegador.
+     */
     public String integritySignature(String reference, long amountInCents, String currency) {
         return sha256(reference + amountInCents + currency + integritySecret);
     }
 
-    /** Reads a transaction from Wompi (public endpoint, no private key needed). */
+    /** Consulta una transacción en Wompi (endpoint público, no necesita llave privada). */
     public Optional<WompiTransaction> findTransaction(String transactionId) {
         try {
             JsonNode body = http.get().uri("/transactions/{id}", transactionId)
                     .retrieve()
+                    // Un 4xx (p. ej. 404) no lanza excepción: se trata abajo como "no encontrada".
                     .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> { })
                     .body(JsonNode.class);
             JsonNode data = body == null ? null : body.get("data");
             return data == null || data.isNull() ? Optional.empty() : Optional.of(WompiTransaction.from(data));
         } catch (RestClientException e) {
+            // Error de red o 5xx: Wompi no respondió.
             throw new IllegalStateException("Could not reach Wompi: " + e.getMessage(), e);
         }
     }
 
     /**
-     * Checks the checksum of a webhook event: SHA-256 of the values listed in
-     * signature.properties (read from "data"), then the timestamp, then the events secret.
+     * Verifica el checksum de un evento del webhook: SHA-256 de los valores listados en
+     * signature.properties (leídos de "data"), luego el timestamp y luego el secreto de eventos.
+     * Así se comprueba que el evento lo envió Wompi y no alguien que conoce la URL.
      */
     public boolean isAuthentic(JsonNode event) {
         if (eventsSecret.isBlank() || event == null) {
@@ -76,6 +84,7 @@ public class WompiClient {
         }
         JsonNode signature = event.path("signature");
         StringBuilder payload = new StringBuilder();
+        // Cada propiedad es una ruta como "transaction.id": se recorre el JSON por partes.
         for (JsonNode property : signature.path("properties")) {
             JsonNode value = event.path("data");
             for (String key : property.asText().split("\\.")) {
@@ -84,11 +93,13 @@ public class WompiClient {
             payload.append(value.asText());
         }
         payload.append(event.path("timestamp").asText()).append(eventsSecret);
+        // MessageDigest.isEqual compara en tiempo constante (evita ataques por tiempo de respuesta).
         return MessageDigest.isEqual(
                 sha256(payload.toString()).getBytes(StandardCharsets.UTF_8),
                 signature.path("checksum").asText().toLowerCase().getBytes(StandardCharsets.UTF_8));
     }
 
+    /** Calcula el hash SHA-256 de un texto y lo devuelve en hexadecimal. */
     static String sha256(String text) {
         try {
             byte[] hash = MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8));

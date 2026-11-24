@@ -17,15 +17,21 @@ import java.util.Date;
 import java.util.Optional;
 
 /**
- * GRASP Pure Fabrication: issuing and reading tokens is a technical concern, not a business
- * one, so it gets its own invented class instead of polluting {@link User}.
+ * Genera y lee los tokens JWT de sesión.
+ * <p>
+ * GRASP Fabricación Pura: emitir y leer tokens es un asunto técnico, no de negocio,
+ * así que tiene su propia clase inventada en vez de ensuciar {@link User}.
  */
 @Service
 public class JwtService {
 
-    private final SecretKey key;
-    private final Duration expiration;
+    private final SecretKey key;         // clave para firmar (HMAC-SHA)
+    private final Duration expiration;   // cuánto dura un token
 
+    /**
+     * El secreto viene de la variable JWT_SECRET (en Render la genera el propio Render).
+     * Debe tener mínimo 32 caracteres (256 bits) para que la firma HMAC-SHA256 sea segura.
+     */
     public JwtService(@Value("${canchaya.jwt.secret}") String secret,
                       @Value("${canchaya.jwt.expiration-hours:24}") long expirationHours) {
         byte[] bytes = secret.getBytes(StandardCharsets.UTF_8);
@@ -36,6 +42,7 @@ public class JwtService {
         this.expiration = Duration.ofHours(expirationHours);
     }
 
+    /** Crea un token firmado con el id (subject), correo y rol del usuario; vence en 24 h por defecto. */
     public String generateToken(User user) {
         Instant now = Instant.now();
         return Jwts.builder()
@@ -48,7 +55,10 @@ public class JwtService {
                 .compact();
     }
 
-    /** Returns the authenticated user if the token is valid and not expired. */
+    /**
+     * Devuelve el usuario autenticado si el token es válido y no ha vencido.
+     * Si la firma no coincide (token alterado) o ya venció, devuelve vacío.
+     */
     public Optional<AuthenticatedUser> parse(String token) {
         try {
             Claims claims = Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();

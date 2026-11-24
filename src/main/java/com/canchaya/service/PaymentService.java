@@ -15,12 +15,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Pays the deposit of a reservation.
+ * Paga el anticipo de una reserva con Nequi o Daviplata (simulados).
  * <p>
- * GRASP Indirection: this service stands between the reservation and the concrete payment
- * providers. It asks the resolver for "a method of type X" and sends it the polymorphic
- * message {@code charge(...)}; it never knows whether Wompi, Nequi or Daviplata answers.
- * GRASP High Cohesion: it only handles money; booking rules live in {@link ReservationService}.
+ * GRASP Indirección: este servicio se pone en medio de la reserva y los proveedores de pago
+ * concretos. Le pide al resolver "un medio de tipo X" y le envía el mensaje polimórfico
+ * {@code charge(...)}; nunca sabe si responde Wompi, Nequi o Daviplata.
+ * GRASP Alta Cohesión: solo maneja dinero; las reglas de reservar están en {@link ReservationService}.
  */
 @Service
 public class PaymentService {
@@ -36,20 +36,27 @@ public class PaymentService {
         this.notifications = notifications;
     }
 
+    /**
+     * Cobra el anticipo de la reserva con el medio elegido y registra el resultado.
+     * Si el pago se aprueba, la reserva queda CONFIRMED y se notifica al jugador.
+     */
     @Transactional
     public PaymentResponse payDeposit(Long playerId, Long reservationId, PaymentMethodType type) {
         Reservation reservation = reservations.findById(reservationId)
                 .orElseThrow(() -> new NotFoundException("Reservation " + reservationId + " not found"));
+        // Solo el dueño de la reserva puede pagarla.
         if (!reservation.belongsTo(playerId)) {
             throw new ForbiddenException("You can only pay your own reservations");
         }
 
-        PaymentMethod method = resolver.resolve(type);                                       // Polymorphism
+        // Polimorfismo: se obtiene el medio de pago y se le pide cobrar, sin importar cuál es.
+        PaymentMethod method = resolver.resolve(type);                                       // Polimorfismo
         PaymentResult result = method.charge(reservation.getDepositAmount(), "RES-" + reservation.getId());
 
-        Payment payment = reservation.registerPayment(type, result.status(), result.transactionRef()); // Creator
-        // The reservation is already managed: flush() persists the new payment on this same
-        // instance (save() would merge and hand back a copy, leaving payment.getId() null).
+        // Creador: la reserva crea y guarda el registro del pago (y cambia su estado si se aprobó).
+        Payment payment = reservation.registerPayment(type, result.status(), result.transactionRef()); // Creador
+        // La reserva ya está administrada por JPA: flush() guarda el pago nuevo en esta misma
+        // instancia (save() haría un merge y devolvería una copia, dejando payment.getId() en null).
         reservations.flush();
         if (payment.isApproved()) {
             notifications.reservationConfirmed(reservation, payment);

@@ -11,18 +11,29 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 
-/** GRASP Pure Fabrication: persistence of fields lives here, not inside {@link Field}. */
+/**
+ * Acceso a la tabla de canchas.
+ * GRASP Fabricación Pura: la persistencia de las canchas vive aquí, no dentro de {@link Field}.
+ * <p>
+ * Es solo una interfaz: Spring Data JPA crea la implementación sola. Las consultas se
+ * deducen del NOMBRE del método (findBy... OrderBy...), sin escribir SQL.
+ * JpaRepository ya trae save, findById, findAll, delete, count...
+ */
 public interface FieldRepository extends JpaRepository<Field, Long> {
 
+    /** Canchas activas ordenadas por nombre (A→Z). */
     List<Field> findByActiveTrueOrderByNameAsc();
 
+    /** Canchas activas de una zona, ordenadas por nombre. */
     List<Field> findByActiveTrueAndZoneOrderByNameAsc(Zone zone);
 
+    /** Canchas de un dueño, ordenadas por nombre. */
     List<Field> findByOwnerIdOrderByNameAsc(Long ownerId);
 
     /**
-     * Locks the field row while a reservation is being created, so two players
-     * cannot book the same slot at the same time.
+     * Bloquea la fila de la cancha mientras se crea una reserva (SELECT ... FOR UPDATE),
+     * para que dos jugadores no puedan reservar la misma hora al mismo tiempo.
+     * El bloqueo se libera al terminar la transacción.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select f from Field f where f.id = :id")

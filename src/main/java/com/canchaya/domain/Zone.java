@@ -1,10 +1,15 @@
 package com.canchaya.domain;
 
-/** Sector of Pasto where a field is located, used to filter the catalogue. */
+/** Sector de Pasto donde está la cancha; se usa para filtrar el catálogo. */
 public enum Zone {
+    /** Norte. */
     NORTH,
+    /** Centro. */
     CENTER,
+    /** Occidente. */
     WEST,
+    /** Oriente. */
     EAST,
+    /** Sur. */
     SOUTH
 }

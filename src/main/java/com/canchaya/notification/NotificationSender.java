@@ -1,11 +1,14 @@
 package com.canchaya.notification;
 
 /**
- * GRASP Protected Variations: HOW a message reaches the user (console log today,
- * SMTP e-mail in production, maybe WhatsApp tomorrow) is a point of change.
- * This stable interface protects the rest of the system from that change.
+ * Canal por el que se entrega un mensaje al usuario.
+ * <p>
+ * GRASP Variaciones Protegidas: CÓMO le llega un mensaje al usuario (log en consola hoy,
+ * correo SMTP en producción, quizá WhatsApp mañana) es un punto de cambio.
+ * Esta interfaz estable protege al resto del sistema de ese cambio.
  */
 public interface NotificationSender {
 
+    /** Envía un mensaje con asunto y cuerpo al correo indicado. */
     void send(String to, String subject, String body);
 }

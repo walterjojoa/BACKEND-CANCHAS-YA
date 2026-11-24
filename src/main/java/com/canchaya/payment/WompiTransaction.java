@@ -3,13 +3,14 @@ package com.canchaya.payment;
 import com.fasterxml.jackson.databind.JsonNode;
 
 /**
- * The fields we use from a Wompi transaction.
- * status: PENDING, APPROVED, DECLINED, VOIDED or ERROR.
+ * Los datos que usamos de una transacción de Wompi.
+ * status: PENDING, APPROVED, DECLINED, VOIDED o ERROR.
  * paymentMethodType: CARD, PSE, NEQUI, BANCOLOMBIA_TRANSFER, ...
  */
 public record WompiTransaction(String id, String reference, long amountInCents, String currency,
                                String status, String paymentMethodType) {
 
+    /** Convierte el JSON de Wompi (snake_case) en este record. */
     static WompiTransaction from(JsonNode data) {
         return new WompiTransaction(
                 data.path("id").asText(),
@@ -20,10 +21,12 @@ public record WompiTransaction(String id, String reference, long amountInCents, 
                 data.path("payment_method_type").asText(""));
     }
 
+    /** true si el banco aún no ha dado respuesta. */
     public boolean isPending() {
         return "PENDING".equals(status);
     }
 
+    /** true si el pago fue aprobado. */
     public boolean isApproved() {
         return "APPROVED".equals(status);
     }

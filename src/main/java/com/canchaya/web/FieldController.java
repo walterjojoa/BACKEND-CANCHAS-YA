@@ -17,7 +17,11 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.util.List;
 
-/** GRASP Controller for the "browse fields" and "publish field" use cases. */
+/**
+ * Endpoints de canchas.
+ * GRASP Controlador para los casos de uso "consultar canchas" y "publicar cancha":
+ * recibe la petición, saca los datos y delega en {@link FieldService}.
+ */
 @RestController
 @RequestMapping("/api")
 public class FieldController {
@@ -28,30 +32,36 @@ public class FieldController {
         this.fieldService = fieldService;
     }
 
-    /** GET /api/fields or GET /api/fields?zone=NORTH (NORTH, CENTER, WEST, EAST, SOUTH). */
+    /** GET /api/fields o GET /api/fields?zone=NORTH (NORTH, CENTER, WEST, EAST, SOUTH). Público. */
     @GetMapping("/fields")
     public List<FieldResponse> list(@RequestParam(required = false) Zone zone) {
         return fieldService.listActive(zone);
     }
 
-    /** GET /api/fields/nearby?lat=1.21&lng=-77.28&limit=10 : nearest active fields first. */
+    /** GET /api/fields/nearby?lat=1.21&lng=-77.28&limit=10 : canchas activas, primero las más cercanas. */
     @GetMapping("/fields/nearby")
     public List<NearbyFieldResponse> nearby(@RequestParam double lat, @RequestParam double lng,
                                             @RequestParam(defaultValue = "10") int limit) {
         return fieldService.nearby(lat, lng, limit);
     }
 
+    /** GET /api/fields/{id} : detalle de una cancha. Público. */
     @GetMapping("/fields/{id}")
     public FieldResponse get(@PathVariable Long id) {
         return fieldService.get(id);
     }
 
+    /** GET /api/fields/{id}/availability?date=2026-11-25 : franjas libres/ocupadas de ese día. Público. */
     @GetMapping("/fields/{id}/availability")
     public List<SlotResponse> availability(@PathVariable Long id,
                                            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         return fieldService.availability(id, date);
     }
 
+    /**
+     * POST /api/fields : publica una cancha (solo OWNER, 201 Created).
+     * @AuthenticationPrincipal entrega el usuario que venía dentro del token JWT.
+     */
     @PostMapping("/fields")
     @ResponseStatus(HttpStatus.CREATED)
     public FieldResponse create(@AuthenticationPrincipal AuthenticatedUser user,
@@ -59,12 +69,14 @@ public class FieldController {
         return fieldService.create(user.id(), request);
     }
 
+    /** POST /api/fields/{id}/schedules : define el horario de un día (solo el dueño de la cancha). */
     @PostMapping("/fields/{id}/schedules")
     public FieldResponse setSchedule(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long id,
                                      @Valid @RequestBody ScheduleRequest request) {
         return fieldService.setSchedule(user.id(), id, request);
     }
 
+    /** GET /api/owner/fields : canchas del dueño que tiene la sesión iniciada. */
     @GetMapping("/owner/fields")
     public List<FieldResponse> myFields(@AuthenticationPrincipal AuthenticatedUser user) {
         return fieldService.listByOwner(user.id());

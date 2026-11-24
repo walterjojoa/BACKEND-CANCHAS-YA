@@ -21,8 +21,9 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * GRASP Controller for the "book a field" use case: it receives the system events
- * (reserve, pay, cancel) and delegates. No rules, no SQL, no Wompi here.
+ * Endpoints de reservas y pagos.
+ * GRASP Controlador para el caso de uso "reservar una cancha": recibe los eventos del sistema
+ * (reservar, pagar, cancelar) y delega. Aquí no hay reglas, ni SQL, ni Wompi.
  */
 @RestController
 @RequestMapping("/api")
@@ -39,6 +40,7 @@ public class ReservationController {
         this.wompiCheckout = wompiCheckout;
     }
 
+    /** POST /api/reservations : crea una reserva (solo PLAYER, 201 Created, 409 si la hora está ocupada). */
     @PostMapping("/reservations")
     @ResponseStatus(HttpStatus.CREATED)
     public ReservationResponse create(@AuthenticationPrincipal AuthenticatedUser user,
@@ -46,46 +48,54 @@ public class ReservationController {
         return reservationService.create(user.id(), request);
     }
 
+    /** GET /api/reservations/me : reservas del jugador con la sesión iniciada. */
     @GetMapping("/reservations/me")
     public List<ReservationResponse> mine(@AuthenticationPrincipal AuthenticatedUser user) {
         return reservationService.listForPlayer(user.id());
     }
 
+    /** GET /api/reservations/{id} : detalle (solo el jugador que reservó o el dueño de la cancha). */
     @GetMapping("/reservations/{id}")
     public ReservationResponse get(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long id) {
         return reservationService.get(user.id(), id);
     }
 
+    /** POST /api/reservations/{id}/payments : paga el anticipo con NEQUI o DAVIPLATA (simulados). */
     @PostMapping("/reservations/{id}/payments")
     public PaymentResponse pay(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long id,
                                @Valid @RequestBody PaymentRequest request) {
         return paymentService.payDeposit(user.id(), id, request.method());
     }
 
-    /** Step 1 of a Wompi payment: signed data to open Wompi's checkout. */
+    /** Paso 1 de un pago con Wompi: datos firmados para abrir el checkout de Wompi. */
     @PostMapping("/reservations/{id}/payments/wompi")
     public WompiCheckoutResponse startWompi(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long id) {
         return wompiCheckout.start(user.id(), id);
     }
 
-    /** Step 2: the player is back from Wompi; record the real result of the transaction. */
+    /** Paso 2: el jugador volvió de Wompi; se registra el resultado real de la transacción. */
     @PostMapping("/payments/wompi/confirm")
     public WompiResultResponse confirmWompi(@AuthenticationPrincipal AuthenticatedUser user,
                                             @Valid @RequestBody WompiConfirmRequest request) {
         return wompiCheckout.confirm(user.id(), request.transactionId());
     }
 
-    /** Webhook Wompi calls on every transaction update (configured in Wompi's dashboard). */
+    /**
+     * Webhook que Wompi llama en cada cambio de una transacción (se configura en el panel de Wompi).
+     * Es público pero seguro: si el checksum no es válido responde 401.
+     */
     @PostMapping("/payments/wompi/events")
     public ResponseEntity<Void> wompiEvent(@RequestBody JsonNode event) {
         return wompiCheckout.handleEvent(event) ? ResponseEntity.ok().build() : ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
     }
 
+    /** POST /api/reservations/{id}/cancel : cancela la reserva (solo quien la hizo). */
     @PostMapping("/reservations/{id}/cancel")
     public ReservationResponse cancel(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long id) {
         return reservationService.cancel(user.id(), id);
     }
 
+    /** GET /api/owner/reservations : reservas de todas las canchas del dueño (solo OWNER). */
     @GetMapping("/owner/reservations")
     public List<ReservationResponse> ownerReservations(@AuthenticationPrincipal AuthenticatedUser user) {
         return reservationService.listForOwner(user.id());

@@ -6,10 +6,14 @@ import org.springframework.context.annotation.Configuration;
 import java.time.Clock;
 import java.time.ZoneId;
 
+/** Configuración general de la aplicación (beans compartidos). */
 @Configuration
 public class AppConfig {
 
-    /** Fields are in Pasto, so "now" is always Colombian time, wherever the server runs. */
+    /**
+     * Reloj de la aplicación. Las canchas están en Pasto, así que "ahora" siempre es la hora
+     * de Colombia, sin importar dónde corra el servidor (Render está en Ohio, EE. UU.).
+     */
     @Bean
     public Clock clock() {
         return Clock.system(ZoneId.of("America/Bogota"));

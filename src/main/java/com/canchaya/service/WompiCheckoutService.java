@@ -24,20 +24,23 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Pays a deposit through Wompi's Web Checkout (card, PSE, Nequi, Bancolombia button).
+ * Paga el anticipo con el Web Checkout de Wompi (tarjeta, PSE, Nequi, botón Bancolombia).
  * <ol>
- *   <li>{@link #start}: signs the amount so the player's browser can open Wompi's checkout.</li>
- *   <li>The player pays on Wompi's page and Wompi sends them back with the transaction id.</li>
- *   <li>{@link #confirm} (frontend) or {@link #handleEvent} (Wompi webhook) asks Wompi for the
- *       real result and records it. Both are idempotent, so whichever arrives first wins.</li>
+ *   <li>{@link #start}: firma el monto para que el navegador del jugador abra el checkout de Wompi.</li>
+ *   <li>El jugador paga en la página de Wompi y Wompi lo devuelve a CanchaYa con el id de la transacción.</li>
+ *   <li>{@link #confirm} (desde el frontend) o {@link #handleEvent} (webhook de Wompi) le preguntan a
+ *       Wompi el resultado real y lo registran. Ambos son idempotentes: el que llegue primero gana
+ *       y el segundo no duplica el pago.</li>
  * </ol>
- * GRASP Indirection: the reservation never talks to Wompi; this service translates between
- * our business (reservation, pesos) and Wompi's API (reference, cents, signatures).
+ * GRASP Indirección: la reserva nunca habla con Wompi; este servicio traduce entre nuestro
+ * negocio (reserva, pesos) y la API de Wompi (referencia, centavos, firmas).
  */
 @Service
 public class WompiCheckoutService {
 
+    /** Moneda: pesos colombianos. */
     static final String CURRENCY = "COP";
+    /** Formato de la referencia que enviamos a Wompi: RES-{idReserva}-{marcaDeTiempo}. */
     private static final Pattern REFERENCE = Pattern.compile("^RES-(\\d+)-\\d+$");
 
     private final ReservationRepository reservations;
@@ -51,8 +54,13 @@ public class WompiCheckoutService {
         this.notifications = notifications;
     }
 
+    /**
+     * Paso 1: prepara los datos para abrir el checkout de Wompi (llave pública, referencia,
+     * monto en centavos y firma de integridad). No guarda nada en la BD.
+     */
     @Transactional(readOnly = true)
     public WompiCheckoutResponse start(Long playerId, Long reservationId) {
+        // Sin llaves configuradas en el servidor no se puede usar Wompi.
         if (!wompi.isConfigured()) {
             throw new BusinessException("Wompi is not configured on the server");
         }
@@ -60,16 +68,18 @@ public class WompiCheckoutService {
         if (reservation.getStatus() != ReservationStatus.PENDING_PAYMENT) {
             throw new BusinessException("Reservation " + reservationId + " is " + reservation.getStatus() + " and cannot be paid");
         }
-        // A new reference per attempt: Wompi rejects a reference that was already used.
+        // Una referencia nueva en cada intento: Wompi rechaza una referencia ya usada.
         String reference = "RES-" + reservation.getId() + "-" + System.currentTimeMillis();
         long cents = toCents(reservation.getDepositAmount());
+        // La firma evita que alguien cambie el monto en el navegador antes de pagar.
         return new WompiCheckoutResponse(reservation.getId(), wompi.publicKey(), reference, cents, CURRENCY,
                 wompi.integritySignature(reference, cents, CURRENCY));
     }
 
-    /** Called by the frontend when Wompi redirects the player back with ?id=transactionId. */
+    /** Paso 3a: lo llama el frontend cuando Wompi devuelve al jugador con ?id=idTransaccion. */
     @Transactional
     public WompiResultResponse confirm(Long playerId, String transactionId) {
+        // Se consulta la transacción directamente a Wompi (no se confía en lo que diga el navegador).
         WompiTransaction tx = wompi.findTransaction(transactionId)
                 .orElseThrow(() -> new NotFoundException("Wompi transaction " + transactionId + " not found"));
         Reservation reservation = reservationOf(tx);
@@ -79,36 +89,45 @@ public class WompiCheckoutService {
         return record(reservation, tx);
     }
 
-    /** Called by Wompi's webhook (transaction.updated). Returns false if the event is not authentic. */
+    /**
+     * Paso 3b: lo llama el webhook de Wompi (evento transaction.updated).
+     * Devuelve false si el evento no es auténtico (checksum inválido).
+     */
     @Transactional
     public boolean handleEvent(JsonNode event) {
         if (!wompi.isAuthentic(event)) {
             return false;
         }
         String transactionId = event.path("data").path("transaction").path("id").asText();
-        // Ask Wompi again instead of trusting the body: the API is the source of truth.
+        // Se vuelve a preguntar a Wompi en vez de confiar en el cuerpo: la API es la fuente de verdad.
         wompi.findTransaction(transactionId).ifPresent(tx -> record(reservationOf(tx), tx));
         return true;
     }
 
+    /**
+     * Registra el resultado de una transacción en la reserva, de forma idempotente
+     * (si ya se registró, no lo vuelve a hacer).
+     */
     private WompiResultResponse record(Reservation reservation, WompiTransaction tx) {
+        // Seguridad: el monto y la moneda pagados deben coincidir exactamente con el anticipo.
         if (tx.amountInCents() != toCents(reservation.getDepositAmount()) || !CURRENCY.equals(tx.currency())) {
             throw new BusinessException("Wompi transaction " + tx.id() + " does not match the deposit");
         }
         Optional<Payment> existing = reservation.getPayments().stream()
                 .filter(p -> tx.id().equals(p.getTransactionRef())).findFirst();
-        if (existing.isPresent()) {                                   // already recorded: idempotent
+        if (existing.isPresent()) {                                   // ya registrado: idempotente
             return result(reservation, tx, existing.get().getStatus().name());
         }
+        // El banco todavía no responde: no se registra nada aún.
         if (tx.isPending()) {
             return result(reservation, tx, "PENDING");
         }
         if (reservation.getStatus() != ReservationStatus.PENDING_PAYMENT) {
-            // e.g. cancelled while the player was paying: nothing to record here
+            // p. ej. se canceló mientras el jugador pagaba: aquí no hay nada que registrar
             return result(reservation, tx, tx.isApproved() ? "APPROVED" : "DECLINED");
         }
         PaymentStatus status = tx.isApproved() ? PaymentStatus.APPROVED : PaymentStatus.DECLINED;
-        Payment payment = reservation.registerPayment(PaymentMethodType.WOMPI, status, tx.id()); // Creator
+        Payment payment = reservation.registerPayment(PaymentMethodType.WOMPI, status, tx.id()); // Creador
         reservations.flush();
         if (payment.isApproved()) {
             notifications.reservationConfirmed(reservation, payment);
@@ -116,11 +135,13 @@ public class WompiCheckoutService {
         return result(reservation, tx, status.name());
     }
 
+    /** Arma la respuesta que ve el frontend. */
     private static WompiResultResponse result(Reservation reservation, WompiTransaction tx, String status) {
         return new WompiResultResponse(reservation.getId(), tx.id(), status, tx.paymentMethodType(),
                 reservation.getStatus());
     }
 
+    /** Busca la reserva y verifica que sea del jugador (404 / 403). */
     private Reservation ownReservation(Long playerId, Long reservationId) {
         Reservation reservation = reservations.findById(reservationId)
                 .orElseThrow(() -> new NotFoundException("Reservation " + reservationId + " not found"));
@@ -130,6 +151,7 @@ public class WompiCheckoutService {
         return reservation;
     }
 
+    /** Saca el id de la reserva de la referencia "RES-{id}-{tiempo}" de la transacción. */
     private Reservation reservationOf(WompiTransaction tx) {
         Matcher m = REFERENCE.matcher(tx.reference());
         if (!m.matches()) {
@@ -139,6 +161,7 @@ public class WompiCheckoutService {
         return reservations.findById(id).orElseThrow(() -> new NotFoundException("Reservation " + id + " not found"));
     }
 
+    /** Wompi trabaja en centavos: 24000 pesos → 2400000 centavos. */
     static long toCents(BigDecimal pesos) {
         return pesos.movePointRight(2).longValueExact();
     }
