@@ -2,12 +2,17 @@ package com.canchaya.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 import java.time.Clock;
 import java.time.ZoneId;
 
-/** Configuración general de la aplicación (beans compartidos). */
+/**
+ * Configuración general de la aplicación (beans compartidos).
+ * @EnableScheduling activa los @Scheduled (p. ej. el vencimiento de reservas sin pagar).
+ */
 @Configuration
+@EnableScheduling
 public class AppConfig {
 
     /**

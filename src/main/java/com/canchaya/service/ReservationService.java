@@ -14,6 +14,7 @@ import com.canchaya.policy.DepositPolicy;
 import com.canchaya.repository.FieldRepository;
 import com.canchaya.repository.ReservationRepository;
 import com.canchaya.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,15 +41,22 @@ public class ReservationService {
     private final NotificationService notifications;
     /** Reloj inyectado (en vez de usar la hora del sistema directo) para poder fijar la hora en los tests. */
     private final Clock clock;
+    private final ReservationExpiryService expiry;
+    /** canchaya.reservations.reference-bookable: ¿se pueden reservar las canchas de referencia (demo)? */
+    private final boolean referenceListingsBookable;
 
     public ReservationService(ReservationRepository reservations, FieldRepository fields, UserRepository users,
-                              DepositPolicy depositPolicy, NotificationService notifications, Clock clock) {
+                              DepositPolicy depositPolicy, NotificationService notifications, Clock clock,
+                              ReservationExpiryService expiry,
+                              @Value("${canchaya.reservations.reference-bookable:true}") boolean referenceListingsBookable) {
+        this.referenceListingsBookable = referenceListingsBookable;
         this.reservations = reservations;
         this.fields = fields;
         this.users = users;
         this.depositPolicy = depositPolicy;
         this.notifications = notifications;
         this.clock = clock;
+        this.expiry = expiry;
     }
 
     /**
@@ -70,18 +78,27 @@ public class ReservationService {
         Field field = fields.findByIdForUpdate(request.fieldId())
                 .orElseThrow(() -> new NotFoundException("Field " + request.fieldId() + " not found"));
 
-        // 3. Si alguna reserva de ese día se cruza con el rango pedido → 409 Conflict.
+        // Las canchas de referencia (negocios no afiliados) solo se reservan si la demo lo permite.
+        if (!field.acceptsBookings(referenceListingsBookable)) {
+            throw new BusinessException("Field " + field.getName() + " is not accepting reservations on CanchaYa yet");
+        }
+
+        // 3. Las reservas que nadie pagó a tiempo liberan su turno (se guardan como CANCELLED
+        //    antes de insertar, porque la base de datos rechaza cruces entre reservas no canceladas).
+        expiry.releaseExpired(field.getId(), request.date());
+
+        // 4. Si alguna reserva de ese día se cruza con el rango pedido → 409 Conflict.
         boolean taken = reservations.findByFieldIdAndDate(field.getId(), request.date()).stream()
                 .anyMatch(r -> r.overlaps(request.startHour(), request.endHour()));   // Experto
         if (taken) {
             throw new ConflictException("That time slot is already booked");
         }
 
-        // 4. La cancha crea la reserva (valida horario y calcula total y anticipo).
+        // 5. La cancha crea la reserva (valida horario y calcula total y anticipo).
         Reservation reservation = field.book(player, request.date(),                 // Creador
                 request.startHour(), request.endHour(), depositPolicy);
         reservations.save(reservation);
-        // 5. Se avisa al jugador sin saber si es por correo o por log.
+        // 6. Se avisa al jugador sin saber si es por correo o por log.
         notifications.reservationCreated(reservation);                               // Indirección
         return ReservationResponse.from(reservation);
     }

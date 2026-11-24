@@ -35,7 +35,8 @@ public class PaymentMethodResolver {
             throw new BusinessException("Wompi payments go through POST /api/reservations/{id}/payments/wompi (checkout)");
         }
         if (method == null) {
-            throw new BusinessException("Payment method not supported: " + type);
+            // P. ej. NEQUI/DAVIPLATA simulados en producción (canchaya.payments.simulated-enabled=false).
+            throw new BusinessException("Payment method not available: " + type + ". Pay through Wompi");
         }
         return method;
     }

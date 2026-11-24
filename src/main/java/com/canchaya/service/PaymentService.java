@@ -4,6 +4,7 @@ import com.canchaya.domain.Payment;
 import com.canchaya.domain.PaymentMethodType;
 import com.canchaya.domain.Reservation;
 import com.canchaya.dto.ReservationDtos.PaymentResponse;
+import com.canchaya.exception.BusinessException;
 import com.canchaya.exception.ForbiddenException;
 import com.canchaya.exception.NotFoundException;
 import com.canchaya.notification.NotificationService;
@@ -28,12 +29,14 @@ public class PaymentService {
     private final ReservationRepository reservations;
     private final PaymentMethodResolver resolver;
     private final NotificationService notifications;
+    private final ReservationExpiryService expiry;
 
     public PaymentService(ReservationRepository reservations, PaymentMethodResolver resolver,
-                          NotificationService notifications) {
+                          NotificationService notifications, ReservationExpiryService expiry) {
         this.reservations = reservations;
         this.resolver = resolver;
         this.notifications = notifications;
+        this.expiry = expiry;
     }
 
     /**
@@ -47,6 +50,10 @@ public class PaymentService {
         // Solo el dueño de la reserva puede pagarla.
         if (!reservation.belongsTo(playerId)) {
             throw new ForbiddenException("You can only pay your own reservations");
+        }
+        // Un turno vencido ya no se cobra: el jugador debe reservar de nuevo.
+        if (reservation.isUnpaidSince(expiry.deadline())) {
+            throw new BusinessException("Reservation " + reservationId + " expired without payment; book again");
         }
 
         // Polimorfismo: se obtiene el medio de pago y se le pide cobrar, sin importar cuál es.

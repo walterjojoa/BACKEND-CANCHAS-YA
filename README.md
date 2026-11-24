@@ -101,7 +101,7 @@ Los endpoints protegidos necesitan el encabezado `Authorization: Bearer <token>`
 | POST | `/api/reservations/{id}/payments/wompi` | Jugador | Datos firmados para abrir el checkout de Wompi |
 | POST | `/api/payments/wompi/confirm` | Jugador | Al volver de Wompi: consulta la transacción y registra el pago |
 | POST | `/api/payments/wompi/events` | Wompi | Webhook de Wompi (verificado con checksum SHA-256) |
-| POST | `/api/reservations/{id}/payments` | Jugador | Pago directo simulado (`NEQUI`, `DAVIPLATA`) |
+| POST | `/api/reservations/{id}/payments` | Jugador | Pago directo simulado (`NEQUI`, `DAVIPLATA`). Solo en desarrollo: en producción responde 400 |
 | POST | `/api/reservations/{id}/cancel` | Jugador | Cancelar la reserva |
 | GET | `/api/health` | Público | Estado del servicio |
 
@@ -122,10 +122,16 @@ curl -X POST localhost:8080/api/reservations -H "Authorization: Bearer $TOKEN" \
      -H "Content-Type: application/json" \
      -d '{"fieldId":1,"date":"2026-12-05","startHour":19,"endHour":21}'
 
-# 4. Pagar el anticipo con Nequi -> estado CONFIRMED y se notifica al jugador y al dueño
+# 4. Pagar el anticipo con Nequi (simulado, solo en local) -> estado CONFIRMED y se notifica al jugador y al dueño
 curl -X POST localhost:8080/api/reservations/1/payments -H "Authorization: Bearer $TOKEN" \
      -H "Content-Type: application/json" -d '{"method":"NEQUI"}'
 ```
+
+### Reglas que protegen las franjas
+
+- **Pagos simulados solo en desarrollo.** `NEQUI` y `DAVIPLATA` directos siempre aprueban, así que solo existen con `canchaya.payments.simulated-enabled=true` (perfil local y pruebas). En producción el anticipo se paga por Wompi.
+- **Las reservas sin pagar vencen.** Una reserva `PENDING_PAYMENT` ocupa su franja durante `canchaya.reservations.payment-timeout-minutes` (15 por defecto). Después pasa a `CANCELLED` y la franja queda libre (`ReservationExpiryService`: un job cada minuto y, además, justo antes de crear una reserva en esa cancha y día). Se usa `CANCELLED` porque la base de datos solo acepta ese estado y su restricción anti-cruces (V07) ignora las canceladas.
+- **Canchas de referencia.** Se pueden reservar como demostración mientras `REFERENCE_FIELDS_BOOKABLE` sea `true` (valor por defecto). Con `false`, reservarlas responde 400 y su disponibilidad sale toda ocupada.
 
 ## Estructura del proyecto
 
@@ -298,6 +304,8 @@ ReservationController.pay()               ← Controller
 | `CORS_ALLOWED_ORIGINS` | URL del frontend, p. ej. `https://canchaya.onrender.com` |
 | `SEED_DEMO_DATA` | `true` solo si se quieren los datos de prueba |
 | `MAIL_ENABLED`, `MAIL_HOST`, `MAIL_USERNAME`, `MAIL_PASSWORD` | opcional, para correos reales |
+| `SIMULATED_PAYMENTS` | opcional, `false` por defecto: activa los pagos `NEQUI`/`DAVIPLATA` simulados |
+| `REFERENCE_FIELDS_BOOKABLE` | opcional, `true` por defecto: `false` cuando ya haya canchas de dueños reales |
 
 4. Health check path: `/api/health`.
 

@@ -113,6 +113,14 @@ public class Reservation {
         return overlaps(hour, hour + 1);
     }
 
+    /**
+     * true si sigue sin pagar y se creó antes de deadline: su turno ya venció y no debe
+     * contar como ocupado (ver {@link com.canchaya.service.ReservationExpiryService}).
+     */
+    public boolean isUnpaidSince(Instant deadline) {
+        return status == ReservationStatus.PENDING_PAYMENT && createdAt.isBefore(deadline);
+    }
+
     /** true si la reserva es del usuario con ese id. */
     public boolean belongsTo(Long userId) {
         return player.getId().equals(userId);

@@ -16,9 +16,11 @@ import com.canchaya.exception.NotFoundException;
 import com.canchaya.repository.FieldRepository;
 import com.canchaya.repository.ReservationRepository;
 import com.canchaya.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -35,11 +37,17 @@ public class FieldService {
     private final FieldRepository fields;
     private final UserRepository users;
     private final ReservationRepository reservations;
+    private final ReservationExpiryService expiry;
+    private final boolean referenceListingsBookable;
 
-    public FieldService(FieldRepository fields, UserRepository users, ReservationRepository reservations) {
+    public FieldService(FieldRepository fields, UserRepository users, ReservationRepository reservations,
+                        ReservationExpiryService expiry,
+                        @Value("${canchaya.reservations.reference-bookable:true}") boolean referenceListingsBookable) {
+        this.referenceListingsBookable = referenceListingsBookable;
         this.fields = fields;
         this.users = users;
         this.reservations = reservations;
+        this.expiry = expiry;
     }
 
     /** Catálogo de canchas activas ordenado por nombre; si llega una zona, filtra por ella. */
@@ -114,14 +122,20 @@ public class FieldService {
         if (schedule.isEmpty()) {
             return List.of();
         }
-        List<Reservation> booked = reservations.findByFieldIdAndDate(fieldId, date);
+        // Las reservas que nadie pagó a tiempo ya no ocupan su turno.
+        Instant deadline = expiry.deadline();
+        List<Reservation> booked = reservations.findByFieldIdAndDate(fieldId, date).stream()
+                .filter(r -> !r.isUnpaidSince(deadline))
+                .toList();
+        // Si la cancha no acepta reservas (p. ej. de referencia con la demo apagada), ninguna franja está libre.
+        boolean bookable = field.acceptsBookings(referenceListingsBookable);
         List<SlotResponse> slots = new ArrayList<>();
         // Recorre hora por hora desde la apertura hasta el cierre.
         for (int hour = schedule.get().getOpeningHour(); hour < schedule.get().getClosingHour(); hour++) {
             final int h = hour; // variable final para usarla dentro de la lambda
             // Experto: cada Reserva responde si ocupa esa hora.
             boolean taken = booked.stream().anyMatch(r -> r.occupies(h));
-            slots.add(new SlotResponse(hour, !taken));
+            slots.add(new SlotResponse(hour, bookable && !taken));
         }
         return slots;
     }

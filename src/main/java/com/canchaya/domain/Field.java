@@ -100,6 +100,15 @@ public class Field {
         this.zone = zone;
     }
 
+    /**
+     * GRASP Experto: la cancha sabe si es de referencia, así que ella responde si acepta reservas.
+     * Las de referencia son negocios reales que no se han unido a CanchaYa; solo se reservan
+     * como demostración cuando referenceListingsBookable es true.
+     */
+    public boolean acceptsBookings(boolean referenceListingsBookable) {
+        return active && (!referenceListing || referenceListingsBookable);
+    }
+
     /** Marca la cancha como "de referencia" (real, pero su dueño no usa la plataforma). Devuelve this para encadenar. */
     public Field asReferenceListing() {
         this.referenceListing = true;

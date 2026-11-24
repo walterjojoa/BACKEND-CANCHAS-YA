@@ -15,6 +15,8 @@ import com.canchaya.payment.WompiClient;
 import com.canchaya.payment.WompiTransaction;
 import com.canchaya.repository.ReservationRepository;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,16 +44,19 @@ public class WompiCheckoutService {
     static final String CURRENCY = "COP";
     /** Formato de la referencia que enviamos a Wompi: RES-{idReserva}-{marcaDeTiempo}. */
     private static final Pattern REFERENCE = Pattern.compile("^RES-(\\d+)-\\d+$");
+    private static final Logger log = LoggerFactory.getLogger(WompiCheckoutService.class);
 
     private final ReservationRepository reservations;
     private final WompiClient wompi;
     private final NotificationService notifications;
+    private final ReservationExpiryService expiry;
 
     public WompiCheckoutService(ReservationRepository reservations, WompiClient wompi,
-                                NotificationService notifications) {
+                                NotificationService notifications, ReservationExpiryService expiry) {
         this.reservations = reservations;
         this.wompi = wompi;
         this.notifications = notifications;
+        this.expiry = expiry;
     }
 
     /**
@@ -67,6 +72,10 @@ public class WompiCheckoutService {
         Reservation reservation = ownReservation(playerId, reservationId);
         if (reservation.getStatus() != ReservationStatus.PENDING_PAYMENT) {
             throw new BusinessException("Reservation " + reservationId + " is " + reservation.getStatus() + " and cannot be paid");
+        }
+        // No se abre un checkout sobre una reserva cuyo turno ya venció: el jugador debe reservar de nuevo.
+        if (reservation.isUnpaidSince(expiry.deadline())) {
+            throw new BusinessException("Reservation " + reservationId + " expired without payment; book again");
         }
         // Una referencia nueva en cada intento: Wompi rechaza una referencia ya usada.
         String reference = "RES-" + reservation.getId() + "-" + System.currentTimeMillis();
@@ -123,7 +132,12 @@ public class WompiCheckoutService {
             return result(reservation, tx, "PENDING");
         }
         if (reservation.getStatus() != ReservationStatus.PENDING_PAYMENT) {
-            // p. ej. se canceló mientras el jugador pagaba: aquí no hay nada que registrar
+            // p. ej. se canceló o venció mientras el jugador pagaba: aquí no hay nada que registrar,
+            // pero si Wompi sí cobró hay que devolver el dinero a mano.
+            if (tx.isApproved()) {
+                log.warn("Wompi transaction {} approved for reservation {} which is {}: needs a manual refund",
+                        tx.id(), reservation.getId(), reservation.getStatus());
+            }
             return result(reservation, tx, tx.isApproved() ? "APPROVED" : "DECLINED");
         }
         PaymentStatus status = tx.isApproved() ? PaymentStatus.APPROVED : PaymentStatus.DECLINED;

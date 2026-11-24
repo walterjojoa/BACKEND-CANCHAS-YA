@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -111,5 +112,27 @@ class FieldTest {
         assertThat(r.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
         assertThatThrownBy(() -> r.registerPayment(PaymentMethodType.NEQUI, PaymentStatus.APPROVED, "again"))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void onlyUnpaidReservationsExpire() {
+        Reservation unpaid = field.book(player, SATURDAY, 19, 21, deposit30);
+        Reservation paid = field.book(player, SATURDAY, 8, 9, deposit30);
+        paid.registerPayment(PaymentMethodType.NEQUI, PaymentStatus.APPROVED, "NEQUI-2");
+        Instant later = Instant.now().plusSeconds(60);
+
+        assertThat(unpaid.isUnpaidSince(later)).isTrue();
+        assertThat(unpaid.isUnpaidSince(Instant.now().minusSeconds(60))).isFalse();
+        assertThat(paid.isUnpaidSince(later)).isFalse();
+    }
+
+    @Test
+    void referenceFieldsAcceptBookingsOnlyWhenAllowed() {
+        assertThat(field.acceptsBookings(false)).isTrue();
+
+        field.asReferenceListing();
+
+        assertThat(field.acceptsBookings(true)).isTrue();
+        assertThat(field.acceptsBookings(false)).isFalse();
     }
 }
