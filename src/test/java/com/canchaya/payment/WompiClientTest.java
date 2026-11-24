@@ -34,4 +34,22 @@ class WompiClientTest {
         assertThat(wompi.isAuthentic(good)).isTrue();
         assertThat(wompi.isAuthentic(tampered)).isFalse();
     }
+
+    @Test
+    void keysPastedWithSpacesOrNewlinesStillSignTheSame() {
+        WompiClient pasted = new WompiClient(" pub_test_x\n", "test_integrity_abc \n", "\ttest_events_xyz ",
+                "https://sandbox.wompi.co/v1");
+
+        assertThat(pasted.publicKey()).isEqualTo("pub_test_x");
+        assertThat(pasted.integritySignature("RES-7-1700000000000", 4_800_000, "COP"))
+                .isEqualTo(wompi.integritySignature("RES-7-1700000000000", 4_800_000, "COP"));
+    }
+
+    @Test
+    void keyKindIsDetectedWithoutLookingAtTheSecret() {
+        assertThat(WompiClient.kind("test_integrity_abc", "test_integrity_", "prod_integrity_")).isEqualTo("PRUEBAS");
+        assertThat(WompiClient.kind("prod_integrity_abc", "test_integrity_", "prod_integrity_")).isEqualTo("PRODUCCION");
+        assertThat(WompiClient.kind("", "test_integrity_", "prod_integrity_")).isEqualTo("VACIA");
+        assertThat(WompiClient.kind("abc", "test_integrity_", "prod_integrity_")).isEqualTo("FORMATO DESCONOCIDO");
+    }
 }

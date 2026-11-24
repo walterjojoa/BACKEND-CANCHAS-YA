@@ -1,6 +1,8 @@
 package com.canchaya.payment;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
@@ -24,6 +26,8 @@ import java.util.Optional;
 @Component
 public class WompiClient {
 
+    private static final Logger log = LoggerFactory.getLogger(WompiClient.class);
+
     private final String publicKey;       // llave pública: la ve el navegador
     private final String integritySecret; // secreto para firmar el monto del checkout
     private final String eventsSecret;    // secreto para verificar los webhooks
@@ -34,10 +38,36 @@ public class WompiClient {
                        @Value("${canchaya.wompi.integrity-secret:}") String integritySecret,
                        @Value("${canchaya.wompi.events-secret:}") String eventsSecret,
                        @Value("${canchaya.wompi.api-url:https://sandbox.wompi.co/v1}") String apiUrl) {
-        this.publicKey = publicKey;
-        this.integritySecret = integritySecret;
-        this.eventsSecret = eventsSecret;
+        // strip(): al pegar una llave en un panel es fácil que se cuele un espacio o salto de línea,
+        // y con un solo carácter de más la firma ya no coincide con la que calcula Wompi.
+        this.publicKey = publicKey.strip();
+        this.integritySecret = integritySecret.strip();
+        this.eventsSecret = eventsSecret.strip();
         this.http = RestClient.builder().baseUrl(apiUrl).build();
+        logKeyKinds(apiUrl);
+    }
+
+    /**
+     * Deja en el log de qué tipo es cada llave (pruebas o producción) y su largo, SIN mostrar los secretos.
+     * Sirve para detectar llaves de ambientes mezclados, que Wompi rechaza con "La firma es inválida".
+     */
+    private void logKeyKinds(String apiUrl) {
+        String pubKind = kind(publicKey, "pub_test_", "pub_prod_");
+        String integrityKind = kind(integritySecret, "test_integrity_", "prod_integrity_");
+        String eventsKind = kind(eventsSecret, "test_events_", "prod_events_");
+        log.info("Wompi: api={} | llave publica={} | secreto integridad={} (largo {}) | secreto eventos={} (largo {})",
+                apiUrl, pubKind, integrityKind, integritySecret.length(), eventsKind, eventsSecret.length());
+        if (!pubKind.equals(integrityKind) && !publicKey.isBlank() && !integritySecret.isBlank()) {
+            log.warn("Wompi: la llave publica es de {} pero el secreto de integridad es de {}; Wompi rechazara la firma",
+                    pubKind, integrityKind);
+        }
+    }
+
+    static String kind(String key, String testPrefix, String prodPrefix) {
+        if (key.isBlank()) return "VACIA";
+        if (key.startsWith(testPrefix)) return "PRUEBAS";
+        if (key.startsWith(prodPrefix)) return "PRODUCCION";
+        return "FORMATO DESCONOCIDO";
     }
 
     /** true si hay llave pública y secreto de integridad (lo mínimo para abrir el checkout). */
