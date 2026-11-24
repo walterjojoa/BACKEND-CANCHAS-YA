@@ -130,7 +130,7 @@ curl -X POST localhost:8080/api/reservations/1/payments -H "Authorization: Beare
 ### Reglas que protegen las franjas
 
 - **Pagos simulados solo en desarrollo.** `NEQUI` y `DAVIPLATA` directos siempre aprueban, así que solo existen con `canchaya.payments.simulated-enabled=true` (perfil local y pruebas). En producción el anticipo se paga por Wompi.
-- **Las reservas sin pagar vencen.** Una reserva `PENDING_PAYMENT` ocupa su franja durante `canchaya.reservations.payment-timeout-minutes` (15 por defecto). Después pasa a `CANCELLED` y la franja queda libre (`ReservationExpiryService`: un job cada minuto y, además, justo antes de crear una reserva en esa cancha y día). Se usa `CANCELLED` porque la base de datos solo acepta ese estado y su restricción anti-cruces (V07) ignora las canceladas.
+- **Las reservas sin pagar vencen.** Una reserva `PENDING_PAYMENT` ocupa su franja durante `canchaya.reservations.payment-timeout-minutes` (10 por defecto, regla RN02). Después pasa a `CANCELLED` y la franja queda libre (`ReservationExpiryService`: un job cada minuto y, además, justo antes de crear una reserva en esa cancha y día). Se usa `CANCELLED` porque la base de datos solo acepta ese estado y su restricción anti-cruces (V07) ignora las canceladas.
 - **Canchas de referencia.** Se pueden reservar como demostración mientras `REFERENCE_FIELDS_BOOKABLE` sea `true` (valor por defecto). Con `false`, reservarlas responde 400 y su disponibilidad sale toda ocupada.
 
 ## Estructura del proyecto

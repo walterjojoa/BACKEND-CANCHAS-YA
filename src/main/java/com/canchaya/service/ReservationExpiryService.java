@@ -18,7 +18,7 @@ import java.time.LocalDate;
  * Libera los turnos de las reservas que nadie pagó a tiempo.
  * <p>
  * Toda reserva nace PENDING_PAYMENT y ocupa su franja. Si el anticipo no se paga en
- * canchaya.reservations.payment-timeout-minutes (15 por defecto), la reserva pasa a CANCELLED
+ * canchaya.reservations.payment-timeout-minutes (10 por defecto, regla RN02), la reserva pasa a CANCELLED
  * y la franja queda libre. Así nadie puede bloquear una cancha entera sin pagar.
  * <p>
  * Se usa CANCELLED (y no un estado nuevo) porque la base de datos solo acepta
@@ -38,7 +38,7 @@ public class ReservationExpiryService {
     private final Duration timeout;
 
     public ReservationExpiryService(ReservationRepository reservations, Clock clock,
-                                    @Value("${canchaya.reservations.payment-timeout-minutes:15}") long timeoutMinutes) {
+                                    @Value("${canchaya.reservations.payment-timeout-minutes:10}") long timeoutMinutes) {
         this.reservations = reservations;
         this.clock = clock;
         this.timeout = Duration.ofMinutes(timeoutMinutes);
